@@ -1,94 +1,212 @@
-# Modulo-ADC-and-OFDM
-Modulo & Clipped Signal Reconstruction Algorithms
+# 🧠 One-Bit Unlimited Sampling & Modulo ADC
 
-This repository contains MATLAB implementations, simulations, and analysis for reconstructing signals that undergo clipping, modulo folding, or low-rate nonlinear ADC operations. The work explores algorithmic strategies inspired by compressed sensing, linear prediction, blind estimation, and time–frequency separation principles.
+## 📌 Overview
+This project explores **unlimited sampling using modulo ADCs**, a framework that overcomes the **finite dynamic range limitation** of traditional ADCs.
 
-📌 Contents
+Conventional ADCs suffer from **clipping and saturation** when signals exceed range. This work demonstrates how **modulo folding + reconstruction algorithms** can recover high dynamic range signals accurately.
 
-B2R2 signal reconstruction using Projected Gradient Descent
+---
 
-Linear Prediction + Chebyshev filtering for clipped signals
+## 🚨 Problem Statement
+In practical ADC systems:
+- Signals exceeding range → **information loss**
+- Increasing range → **hardware complexity**
 
-Monte Carlo simulations for reconstruction error analysis
+👉 Goal:
+- Encode signals into bounded range  
+- Reconstruct original signal with minimal error  
 
-Modified linear prediction without prior knowledge of 
-𝑁
-𝜆
-N
-λ
-	​
+---
+
+## 💡 Key Idea: Modulo Sampling
+
+Instead of clipping, we apply:
+<p align="center">
+  <img src="Screenshot 2026-03-23 233253.png" width="350" title="hover text">
+</p>
 
 
-Exhaustive search–based folded-sample prediction
+- Folds signal into range **[-λ, λ]**
+- Retains only **least significant information**
+- Discards amplitude overflow (temporarily)
 
-OFDM symbol detection from low-rate modulo ADC samples
 
-Blind modulo ADC architecture using LMS filter adaptation
+---
 
-🔍 Key Contributions
-1. B2R2-Based Reconstruction
+## 🔄 Trade-off
 
-Recovered heavily clipped and modulo-folded signals using the B2R2 (Beyond Bandwidth Reconstruction Recovery) algorithm implemented via Projected Gradient Descent, leveraging time–frequency separation for stable recovery.
+| Advantage | Drawback |
+|----------|--------|
+| Low hardware complexity | Ambiguity in samples |
+| One-bit possible | Requires reconstruction |
 
-2. Linear Prediction With Chebyshev Filtering
+👉 Ambiguity resolved using **oversampling**
 
-Implemented linear prediction enhanced by Chebyshev polynomial filtering to reconstruct clipped signals.
-Conducted Monte Carlo simulations to study reconstruction error vs:
+---
 
-Oversampling factor (OF)
+## ⚙️ One-Bit Sampling
 
-Clipping ratio
+Extreme case:
+- Only **1-bit (±1)** is stored
+- Acts like a **comparator / sign function**
 
-3. Modified Linear Prediction (No Prior 
-𝑁
-𝜆
-N
-λ
-	​
+Yet, reconstruction is still possible!
 
-)
+---
 
-Developed a modified linear prediction method that does not require prior knowledge of 
-𝑁
-𝜆
-N
-λ
-	​
+## 📡 Signal Assumptions
 
-.
-Contributions include:
+- Signal is **bandlimited (Ω)**
+- Oversampling is used
+- Superoscillations may occur
 
-An exhaustive search strategy to identify the first folded sample
+---
 
-A complementary estimator to recover 
-𝑁
-𝜆
-N
-λ
-	​
+## 📊 Visualizations
 
- even in noisy conditions
+### 🔹 Original vs Modulo Signal
+![Original vs Modulo](images/modulo_signal.png)
 
-4. OFDM Detection from Modulo ADC Outputs
+### 🔹 One-Bit Quantized Output
+![One Bit Output](images/onebit.png)
 
-Proposed a robust OFDM symbol detection method using outputs from a low-rate modulo ADC, designed to operate under:
+👉 Unlike conventional sampling, modulo sampling **captures more structure** of high-amplitude signals.
 
-Quantization noise
+---
 
-Folding nonlinearity
+## ⚡ Conventional vs Modulo Sampling
 
-Resolution limits
+### 🔻 Direct Quantization (Fails)
+- Saturation occurs
+- Information loss
 
-Explored detection strategies that remain reliable despite nonlinear ADC distortions.
+### 🔺 Modulo Quantization
+- No saturation
+- Encodes overflow implicitly
 
-5. Blind Modulo ADC Architecture
+![Comparison](images/comparison.png)
 
-Investigated a blind modulo ADC system that assumes no prior knowledge of input spectral properties.
-Work includes:
+---
 
-FIR filter prediction using LMS adaptation
+## 🔁 Recovery Algorithm
 
-Strategies to prevent error propagation under noise
+### Step 1: Averaging (Low-pass filtering)
+- Smooth quantized samples
+- Implemented using **B-splines**
+- Reduces noise and variation
 
-Validation via extensive MATLAB simulations
+👉 Analogy: Image smoothing filter
 
+---
+
+### Step 2: High-pass Filtering
+- Detect sharp transitions (folding points)
+- Equivalent to **edge detection**
+
+---
+
+### Step 3: Reconstruction
+- Recover lost multiples of **2λ**
+- Use signal structure + oversampling
+
+---
+
+## 🧮 Advanced Recovery (B2R2)
+
+We solve:
+Fλ = VZ
+Where:
+- V = Vandermonde matrix  
+- Z = unknown signal  
+
+---
+
+### 🚀 Optimization Approach
+
+We use **Projected Gradient Descent (PGD)**:
+
+---
+
+### 🎯 Intuition (Ball Rolling Analogy)
+
+- Signal = ball  
+- Loss function = terrain  
+- Constraint = fence  
+
+Ball rolls → projected back → converges
+
+---
+
+## 📈 Results
+
+### 🔹 Reconstructed Signal
+![Reconstructed](images/reconstructed.png)
+
+---
+
+### 🔹 MSE vs Oversampling Factor
+![MSE](images/mse.png)
+
+📌 Observation:
+- Error drops drastically after certain OF
+
+---
+
+### 🔹 Probability of Recovery
+![Probability](images/probability.png)
+
+📌 Observation:
+- Approaches **1 with higher oversampling**
+
+---
+
+### 🔹 Symbol Error Rate (SER)
+![SER](images/ser.png)
+
+📌 Observation:
+- B2R2 significantly outperforms direct methods
+
+---
+
+## 🔬 Key Insights
+
+- Modulo ADC avoids saturation completely  
+- Oversampling resolves ambiguity  
+- One-bit sampling still retains recoverable structure  
+- Reconstruction behaves like **inverse problem + optimization**
+
+---
+
+## ⚠️ Limitations
+
+- Requires oversampling  
+- Sensitive to noise  
+- Matrix inversion can be unstable  
+- Some theoretical assumptions approximated  
+
+---
+
+## 🔗 Code & Implementation
+
+👉 Colab Notebook: *(add your link here)*  
+
+---
+
+## 📚 References
+
+- Unlimited Sampling Theory  
+- Modulo ADC Papers  
+- Signal Processing Fundamentals  
+
+---
+
+## ✍️ Author
+
+**Krunal Vaghela**  
+- Signal Processing | ML | Research  
+
+---
+
+## ⭐ If you like this work
+
+Give a ⭐ to the repo!
