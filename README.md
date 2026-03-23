@@ -64,12 +64,10 @@ Yet, reconstruction is still possible!
 
 ## 📊 Visualizations
 
-### 🔹 Original vs Modulo Signal
-![Original vs Modulo](images/modulo_signal.png)
-
-### 🔹 One-Bit Quantized Output
-![One Bit Output](images/onebit.png)
-
+### 🔹 B2R2 OUTPUT
+![B2R2 OUTPUT](Screenshot 2026-03-23 233313.png)
+## SYMBOL ERROR RATE MONTECARLO SIMULATIONS
+![SER](Screenshot 2026-03-23 232905.png)
 👉 Unlike conventional sampling, modulo sampling **captures more structure** of high-amplitude signals.
 
 ---
