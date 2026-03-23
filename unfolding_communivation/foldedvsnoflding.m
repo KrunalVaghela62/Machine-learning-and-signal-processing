@@ -1,0 +1,156 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% FAST Monte-Carlo SER vs OF
+% Compare:
+%   (A) Unfolded (Exhaustive ML on noisy samples)
+%   (B) Folded   (Exhaustive ML on modulo samples)
+%
+% Fully vectorized
+% GPU optional
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+clear; close all; clc;
+
+%% ================= USER PARAMETERS =========================
+OF_list = [2:8];
+num_MC  = 100;
+
+S  = [-1 1 2 -2];
+E  = 10;
+W  = 10;
+
+lambda = 0.2;
+Delta  = 2*lambda;
+sigma  = lambda*2;
+
+useGPU = false;   % <-- set true if you want GPU
+
+rng(0);
+
+SER_unfold = zeros(length(OF_list), num_MC);
+SER_fold   = zeros(length(OF_list), num_MC);
+
+%% ================= LIVE PLOT ================================
+figure('Color','w','Position',[200 200 900 450]); 
+hold on; grid on;
+xlabel("Oversampling Factor (OF)");
+ylabel("Symbol Error Rate (SER)");
+ylim([0 100]);
+set(gca,'FontSize',12);
+
+hU = [];
+hF = [];
+
+%% ================= MAIN LOOP ================================
+for of_idx = 1:length(OF_list)
+
+    OF = OF_list(of_idx);
+    fprintf("\n========== OF = %d ==========\n", OF);
+
+    %% --- Generate once to build codebook ---
+    [x_cont_tmp, t_d, ~, NoS] = generate_analog_transmit(E, W, OF, S);
+    [~, t_s] = generate_sampled_signal(x_cont_tmp, t_d, W, OF);
+    %[x_samp, t_s] = sample_at_sinc_peaks(x_cont_tmp, t_d, W, NoS);
+    length(t_s);
+    Td = t_d(2) - t_d(1);
+    Fs=1/Td;
+    % Build codebook ONCE
+    A = generate_all_as(S, NoS);     % size: NoS × NumComb
+    H = build_H_matrix(W, NoS, t_s); % size: Ns × NoS
+    x_all = H * A;                   % Ns × NumComb
+
+    if useGPU
+        x_all = gpuArray(x_all);
+    end
+
+    NumComb = size(A,2);
+
+    %% ================= MONTE CARLO ==========================
+    for mc = 1:num_MC
+
+        %% 1) Generate fresh signal
+        [x_cont, t_d, CoS_true, ~] = ...
+            generate_analog_transmit(E, W, OF, S);
+
+        %% 2) Add noise (continuous domain)
+        noise = sigma * randn(length(t_d),1);
+
+        % Ideal sinc LPF (your method)
+        h = 2*W * sinc(2*W*t_d);
+        %x_noisy_cont = conv(x_noisy_cont, h, 'same') * Td;
+        x_noisy_cont=lowpass(noise,W,Fs,ImpulseResponse="iir",Steepness=0.9999);
+        %% 3) Sample
+        x_noisy_cont=x_cont+x_noisy_cont;
+        [x_samp, ~] = generate_sampled_signal(x_noisy_cont, t_d, W, OF);
+        %[x_samp, t_s] = sample_at_sinc_peaks(x_noisy_cont, t_d, W, NoS);
+        x_samp = x_samp(:);
+
+        if useGPU
+            x_samp = gpuArray(x_samp);
+        end
+
+        %% =====================================================
+        % A) UNFOLDED ML (vectorized)
+        %% =====================================================
+        diff_unfold = x_all - x_samp;
+        d_unfold = sum(diff_unfold.^2, 1);
+        [~, idxU] = min(d_unfold);
+
+        if useGPU
+            idxU = gather(idxU);
+        end
+
+        estU = A(:, idxU);
+
+        SER_unfold(of_idx, mc) = ...
+            symbol_error_function(CoS_true(:), estU(:));
+
+        %% =====================================================
+        % B) FOLDED ML (vectorized modulo)
+        %% =====================================================
+        x_mod = mod(x_samp + lambda, 2*lambda) - lambda;
+        % Apply modulo to entire codebook matrix
+        x_all_mod = mod(x_all + lambda, 2*lambda) - lambda;
+
+        diff_fold = x_all_mod - x_mod;
+        d_fold = sum(diff_fold.^2, 1);
+        [~, idxF] = min(d_fold);
+
+        if useGPU
+            idxF = gather(idxF);
+        end
+
+        estF = A(:, idxF);
+
+        SER_fold(of_idx, mc) = ...
+            symbol_error_function(CoS_true(:), estF(:));
+
+        if mod(mc,50)==0
+            fprintf("  MC %d / %d\n", mc, num_MC);
+        end
+    end
+
+    %% ================= LIVE PLOT UPDATE =====================
+    meanU = mean(SER_unfold(1:of_idx,:),2);
+    meanF = mean(SER_fold(1:of_idx,:),2);
+
+    if ~isempty(hU), delete(hU); end
+    if ~isempty(hF), delete(hF); end
+
+    hU = plot(OF_list(1:of_idx), meanU, '-or', ...
+        'LineWidth',1.6,'MarkerFaceColor','r');
+
+    hF = plot(OF_list(1:of_idx), meanF, '-sb', ...
+        'LineWidth',1.6,'MarkerFaceColor','b');
+
+    legend([hU hF], ...
+        {"Unfolded (Exhaustive ML)", ...
+         "Folded (Exhaustive ML on modulo)"}, ...
+         "Location","northeast");
+
+    title(sprintf("SER vs OF (lambda=%.2f, sigma=%.2f)", ...
+        lambda, sigma));
+
+    drawnow;
+end
+
+fprintf("\nSimulation Complete.\n");

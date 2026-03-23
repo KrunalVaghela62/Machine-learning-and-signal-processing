@@ -1,0 +1,174 @@
+
+function main()
+% DEMO_CORRECTED_RECOVERY Demonstrates the corrected algorithm
+    
+    % Signal parameters
+    %Ts    = 0.05;   % Sampling period (seconds)
+    E     = 1;% Target signal energy
+    lambda = 0.2; %in b2r2 we use lambda as 
+    Delta = 2*lambda;    % Modulo threshold
+    W = 10; 
+    OF=2;
+    BW = 2 * pi * W; % Bandwidth in rad/s
+
+    % Derived parameters
+    Wnyq = 2 * BW;         % Nyquist frequency
+    Ws = OF * Wnyq;        % Sampling frequency with oversampling factor
+    Ts = 2 * pi / Ws;
+    c=1;
+    
+    K = compute_required_filter_length(W,E,Delta,Ts);
+    
+    fprintf('Demo Parameters:\n');
+    fprintf('Bandwidth W = %.1f Hz\n', W);
+    fprintf('Sampling period Ts = %.3f s\n', Ts);
+    fprintf('Nyquist condition: Ts < %.3f s ✓\n', 1/(2*W));
+    fprintf('Modulo threshold Delta = %.1f\n', Delta);
+    fprintf('Energy bound E = %.1f\n\n', E);
+    fprintf('Required filter length K = %d\n', 2*K);
+    % Generate test signal
+    %[x_orig, x_mod] = generate_bandlimited_signal(N, W, Ts, Delta);
+    % Generate original continuous sinc
+    %[x_orig, x_mod] = generate_bandlimited_signal(Ts, E, Delta, W);
+    [x_orig_cont,t_d]=generate_original_signal(E, W,OF);
+    [x_orig1,t_s]=generate_sampled_signal(x_orig_cont,t_d);
+
+    %epsilon=0.002;
+    sigma = 0.04;
+    noise = sigma * randn(length(t_d), 1);
+    
+    % Sampling parameters
+    Td = t_d(2) - t_d(1);
+    Fs = 1 / Td;
+    
+    % Low-pass filter the noise (cutoff = W Hz)
+    lpf_noise = lowpass(noise, W, Fs);
+    
+    % Add bandlimited noise
+    x_orig_cont = x_orig_cont + lpf_noise;
+    [x_orig,t_s]=generate_sampled_signal(x_orig_cont,t_d);
+   
+   
+    
+
+    %% 
+    %generate a noise array with each of its element sampled from bounded
+    %uniform distribution of noise upper bound plus-minus sigma
+    %after genreting noise add it to x_mod array and do prediction and find
+    %mse
+    %i want you to repeat this 100 times find 100mses and take their
+    %expectations
+    % Recover signal using corrected algorithm
+    fprintf('Running corrected recovery algorithm...\n');
+    tic;
+    %sigma=0.0125;
+    %noise = sigma * (2*rand(size(x_orig)) - 1); % Generate noise
+    %x_orig_noise=x_orig+noise;
+    x_mod = arrayfun(@(x) modulo_operation(x, Delta), x_orig);
+    [x_rec, success] = modulo_recovery_corrected2(x_mod, Ts, W, Delta, E,x_orig);
+    x_rec_cont = sinc_interpolation(x_rec, t_s, t_d, Ts,OF);
+    elapsed_time = toc;
+    K =compute_required_filter_length(W, E, Delta, Ts);%compute_required_filter_length(W, E, Delta, Ts);
+    h_coeffs = design_chebyshev_predictor(K, W, Ts);
+    N_lam=N_lambda(Delta,x_orig);
+    
+
+    
+    %[y_convolve, ts_new] = fft_convolve_with_timeaxis(x_orig, h_coeffs, Ts, t_s(1));
+    
+    
+        
+    mse=(norm(x_orig1 - x_rec))^2/(norm(x_orig1))^2;
+    %mse = mean((x_orig - x_rec).^2);
+    mse_db = 10 * log10(mse);
+
+    %{
+    x_check_cont=sinc_interpolation(x_orig, t_s, t_d, Ts,OF);
+    mse_cont_check = (norm(x_orig_cont - x_check_cont))^2/(norm(x_orig_cont))^2;
+
+
+    mse_cont = (norm(x_orig_cont - x_rec_cont))^2/(norm(x_orig_cont))^2;
+    mse_cont_db = 10 * log10(mse_cont);
+    
+    %}
+   
+    fprintf('✓ Recovery successful!\n');
+    fprintf('MSE: %.2e\n', mse);
+    %fprintf('MSE_cont: %.2e\n', mse_cont);
+    fprintf('MSE_db: %.2e\n', mse_db);
+    %fprintf('MSE_db_cont: %.2e\n', mse_cont_db);
+    fprintf('Computation time: %.3f seconds\n\n', elapsed_time);
+  
+    % Plot results
+    plot_recovery_results(x_orig_cont,x_orig1, x_mod, x_rec,x_rec_cont,t_d,t_s);
+    
+
+    
+    
+end
+main()
+
+%{
+function main()
+    % Signal parameters
+    E     = 10;              % Target signal energy
+    lambda = 0.04;            % In B2R2 we use lambda
+    Delta = 2*lambda;        % Modulo threshold
+    W = 50; 
+    OF = 10;
+    BW = 2 * pi * W;         % Bandwidth in rad/s
+
+    % Derived parameters
+    Wnyq = 2 * BW;           % Nyquist frequency
+    Ws = OF * Wnyq;          % Sampling frequency with oversampling factor
+    Ts = 2 * pi / Ws;
+
+    % Filter requirement
+    K = compute_required_filter_length(W,E,Delta,Ts);
+    
+    fprintf('Demo Parameters:\n');
+    fprintf('Bandwidth W = %.1f Hz\n', W);
+    fprintf('Sampling period Ts = %.3f s\n', Ts);
+    fprintf('Nyquist condition: Ts < %.3f s ✓\n', 1/(2*W));
+    fprintf('Modulo threshold Delta = %.1f\n', Delta);
+    fprintf('Energy bound E = %.1f\n\n', E);
+    fprintf('Required filter length K = %d\n', 2*K);
+
+    % Generate original signal once
+    [x_orig_cont,t_d] = generate_original_signal(E, W, OF);
+    [x_orig,t_s] = generate_sampled_signal(x_orig_cont,t_d);
+
+    %% Loop for multiple noise realizations
+    num_trials = 50;
+    mse_trials = zeros(num_trials,1);
+    sigma = lambda/20;
+
+    fprintf('Running corrected recovery algorithm for %d trials...\n', num_trials);
+    tic;
+    for trial = 1:num_trials
+        % Generate noise
+        noise = sigma * (2*rand(size(x_orig)) - 1);
+        x_orig_noise = x_orig + noise;
+
+        % Modulo operation
+        x_mod = arrayfun(@(x) modulo_operation(x, Delta), x_orig_noise);
+
+        % Recovery
+        [x_rec, success] = modulo_recovery_corrected(x_mod, Ts, W, Delta, E, x_orig_noise);
+
+        % Compute MSE
+        mse_trials(trial) = (norm(x_orig - x_rec))^2 / (norm(x_orig))^2;
+    end
+    elapsed_time = toc;
+
+    % Compute average MSE over all trials
+    mean_mse = mean(mse_trials);
+    mean_mse_db = 10 * log10(mean_mse);
+
+    fprintf('✓ Recovery successful!\n');
+    fprintf('Average MSE (linear): %.2e\n', mean_mse);
+    fprintf('Average MSE (dB): %.2f dB\n', mean_mse_db);
+    fprintf('Total computation time: %.3f seconds\n\n', elapsed_time);
+end
+main();
+%}

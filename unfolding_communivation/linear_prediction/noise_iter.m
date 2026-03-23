@@ -1,0 +1,82 @@
+function main()
+    % Fixed lambda and varying lambda_by_sigma simulation (GPU accelerated)
+    E = 10;
+    lambda = 0.2;
+    Delta = 2 * lambda;
+    W = 50;
+    OF = 10;
+    BW = 2 * pi * W;
+    Wnyq = 2 * BW;
+    Ws = OF * Wnyq;
+    Ts = 2 * pi / Ws;
+
+    lambda_by_sigma_values = [10,11,12,13,14,15,16,17,18,19,20];
+    num_signals = 20;
+    num_trials = 100;
+
+    fprintf('Fixed lambda = %.3f, Delta = %.3f\n', lambda, Delta);
+    fprintf('Bandwidth W = %.1f Hz, Sampling period Ts = %.3f s\n', W, Ts);
+    fprintf('Nyquist condition: Ts < %.3f s ✓\n', 1/(2*W));
+    
+    mean_mse_values = zeros(length(lambda_by_sigma_values),1);  % Store mean MSE per lambda_by_sigma
+
+    for idx = 1:length(lambda_by_sigma_values)
+        lambda_by_sigma = lambda_by_sigma_values(idx);
+        sigma = lambda / lambda_by_sigma;
+        
+        fprintf('\nRunning for lambda_by_sigma = %d (sigma=%.5f)\n', lambda_by_sigma, sigma);
+        mse_mean_across_signals = zeros(num_signals, 1, 'gpuArray');
+        
+        K = compute_required_filter_length(W, E, Delta, Ts);
+        fprintf('Required filter length K = %d\n', 2*K);
+        
+        for sig_idx = 1:num_signals
+            % Generate one bandlimited signal
+            [x_orig_cont, t_d] = generate_original_signal(E, W, OF);
+            [x_orig, t_s] = generate_sampled_signal(x_orig_cont, t_d);
+
+            % Move to GPU
+            x_orig_cont = gpuArray(x_orig_cont);
+            x_orig = gpuArray(x_orig);
+            t_d = gpuArray(t_d);
+            t_s = gpuArray(t_s);
+            
+            mse_trials = zeros(num_trials, 1, 'gpuArray');
+            
+            for trial = 1:num_trials
+                % Modulo operation on CPU, transfer to GPU
+                x_mod = arrayfun(@(x) modulo_operation(x, Delta), gather(x_orig));
+                x_mod = gpuArray(x_mod);
+
+                % Add bounded uniform noise on GPU
+                noise = (2 * sigma) * rand(size(x_mod), 'gpuArray') - sigma;
+                x_mod_noisy = x_mod + noise;
+
+                % Recovery on CPU
+                [x_rec, success] = modulo_recovery_corrected(gather(x_mod_noisy), Ts, W, Delta, E, gather(x_orig));
+                x_rec = gpuArray(x_rec);
+
+                % Compute MSE
+                mse_trials(trial) = (norm(x_orig - x_rec))^2 / (norm(x_orig))^2;
+            end
+            
+            % Average MSE for this signal
+            mse_mean_across_signals(sig_idx) = mean(mse_trials);
+        end
+        
+        % Average MSE across all signals for this lambda_by_sigma
+        avg_mse = gather(mean(mse_mean_across_signals));
+        mean_mse_values(idx) = avg_mse;
+        avg_mse_db = 10 * log10(avg_mse);
+        fprintf('Average MSE over %d signals and %d noise trials: %.3e (%.3f dB)\n', ...
+            num_signals, num_trials, avg_mse, avg_mse_db);
+    end
+    mean_mse_db = 10 * log10(mean_mse_values);  % convert y-axis to dB
+    
+    figure;
+    plot(lambda_by_sigma_values, mean_mse_db, '-o', 'LineWidth', 2, 'MarkerSize', 8);
+    grid on;
+    xlabel('lambda\_by\_sigma');
+    ylabel('Mean MSE (dB)');
+    title('Mean MSE (dB) vs lambda\_by\_sigma');
+end
