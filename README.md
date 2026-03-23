@@ -65,9 +65,9 @@ Yet, reconstruction is still possible!
 ## 📊 Visualizations
 
 ### 🔹 B2R2 OUTPUT
-![B2R2 OUTPUT](Screenshot 2026-03-23 233313.png)
+![B2R2 OUTPUT]("Screenshot 2026-03-23 233313.png")
 ## SYMBOL ERROR RATE MONTECARLO SIMULATIONS
-![SER](Screenshot 2026-03-23 232905.png)
+![SER]("Screenshot 2026-03-23 232905.png")
 👉 Unlike conventional sampling, modulo sampling **captures more structure** of high-amplitude signals.
 
 ---
@@ -135,36 +135,21 @@ Ball rolls → projected back → converges
 
 ---
 
-## 📈 Results
 
-### 🔹 Reconstructed Signal
-![Reconstructed](images/reconstructed.png)
-
----
-
-### 🔹 MSE vs Oversampling Factor
-![MSE](images/mse.png)
 
 📌 Observation:
 - Error drops drastically after certain OF
 
 ---
 
-### 🔹 Probability of Recovery
-![Probability](images/probability.png)
 
 📌 Observation:
 - Approaches **1 with higher oversampling**
 
----
-
-### 🔹 Symbol Error Rate (SER)
-![SER](images/ser.png)
 
 📌 Observation:
 - B2R2 significantly outperforms direct methods
 
----
 
 ## 🔬 Key Insights
 
